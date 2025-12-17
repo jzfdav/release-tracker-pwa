@@ -36,7 +36,8 @@ async function init() {
         await seedDefaultTemplates();
 
         // Check notifications only on app load
-        await checkAndFireNotifications();
+        // DISABLED for Milestone 6b: Logic moved to Service Worker
+        // await checkAndFireNotifications();
 
         // Register Service Worker (Milestone 6a)
         if ('serviceWorker' in navigator) {
