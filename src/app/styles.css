@@ -4,6 +4,9 @@
   --text-color: #161616;
   --error-color: #da1e28;
   --success-color: #24a148;
+  --border-color: #e0e0e0;
+  --hover-color: #e5e5e5;
+  --muted-text: #6f6f6f;
 }
 
 body {
@@ -18,6 +21,17 @@ body {
 h1 {
   font-size: 2rem;
   margin-bottom: 2rem;
+}
+
+h2 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--border-color);
+  margin: 2rem 0;
 }
 
 .form-group {
@@ -53,6 +67,22 @@ button:hover {
   background-color: #0353e9;
 }
 
+button.secondary {
+  background-color: transparent;
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
+  margin-bottom: 1rem;
+}
+
+button.secondary:hover {
+  background-color: #edf5ff;
+}
+
+button.small {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+
 .radio-group {
   display: flex;
   gap: 1.5rem;
@@ -80,4 +110,47 @@ button:hover {
   background-color: #defbe6;
   color: var(--success-color);
   border: 1px solid var(--success-color);
+}
+
+/* Releases List */
+.release-item {
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.release-item:hover {
+  background-color: var(--hover-color);
+}
+
+/* Task List */
+.task-item {
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  margin-bottom: 1rem;
+  background-color: #fff;
+}
+
+.task-item.active {
+  border-left: 4px solid var(--primary-color);
+}
+
+.task-item.completed {
+  background-color: #f4f4f4;
+  color: var(--muted-text);
+  border-color: #eee;
+}
+
+.task-meta {
+  font-size: 0.875rem;
+  color: var(--muted-text);
+  margin-bottom: 0.5rem;
+}
+
+.task-actions {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.5rem;
 }
