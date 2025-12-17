@@ -7,6 +7,7 @@
   --border-color: #e0e0e0;
   --hover-color: #e5e5e5;
   --muted-text: #6f6f6f;
+  --warning-bg: #fffbf0;
 }
 
 body {
@@ -45,13 +46,19 @@ label {
 }
 
 input[type="number"],
-select {
-  width: 100%;
-  max-width: 300px;
+select,
+input[type="date"],
+input[type="time"] {
   padding: 0.75rem;
   font-size: 1rem;
   border: 1px solid #8d8d8d;
   border-radius: 0;
+  box-sizing: border-box;
+}
+
+input[type="date"],
+input[type="time"] {
+  max-width: 150px;
 }
 
 button {
@@ -81,6 +88,8 @@ button.secondary:hover {
 button.small {
   padding: 0.25rem 0.5rem;
   font-size: 0.875rem;
+  margin-bottom: 0;
+  /* Override secondary margin if applied */
 }
 
 .radio-group {
@@ -112,6 +121,14 @@ button.small {
   border: 1px solid var(--success-color);
 }
 
+.warning-status {
+  background-color: var(--warning-bg);
+  border: 1px solid #f1c21b;
+  color: var(--text-color);
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+}
+
 /* Releases List */
 .release-item {
   padding: 1rem;
@@ -131,6 +148,7 @@ button.small {
   border: 1px solid var(--border-color);
   margin-bottom: 1rem;
   background-color: #fff;
+  position: relative;
 }
 
 .task-item.active {
@@ -147,10 +165,37 @@ button.small {
   font-size: 0.875rem;
   color: var(--muted-text);
   margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: space-between;
 }
 
 .task-actions {
   margin-top: 1rem;
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.schedule-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  /* Push to right on large screens */
+}
+
+@media (max-width: 600px) {
+  .schedule-group {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 0.5rem;
+  }
+}
+
+.notification-badge {
+  display: inline-block;
+  margin-left: 0.5rem;
+  font-size: 1.2rem;
+  line-height: 1;
 }

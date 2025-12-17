@@ -34,6 +34,9 @@ async function init() {
         // Seed data
         await seedDefaultTemplates();
 
+        // Check notifications on load (ONLY here)
+        await checkAndFireNotifications();
+
         // Load Releases
         await loadReleases();
 
@@ -121,8 +124,24 @@ function renderTasks(tasks) {
             branchInfo = `<div>Branch: <code>${task.branchFrom}</code> → <code>${to}</code></div>`;
         }
 
+        // Proposed Date inputs (Pre-fill)
+        const dt = task.proposedDateTime ? new Date(task.proposedDateTime) : null;
+        let dateStr = '';
+        let timeStr = '';
+        if (dt) {
+            // iso format yyyy-mm-dd
+            dateStr = dt.toISOString().split('T')[0];
+            // HH:mm for time input
+            timeStr = dt.toTimeString().substring(0, 5);
+        }
+
+        const hasNotification = !!task.proposedDateTime;
+
         div.innerHTML = `
-      <div class="task-meta">Step ${task.sequence} &middot; Status: ${task.status}</div>
+      <div class="task-meta">
+        <span>Step ${task.sequence} &middot; Status: ${task.status}</span>
+        ${hasNotification ? '<span class="notification-badge">🔔</span>' : ''}
+      </div>
       <h3>${task.title}</h3>
       ${task.description ? `<p>${task.description}</p>` : ''}
       ${branchInfo}
@@ -131,6 +150,14 @@ function renderTasks(tasks) {
         ${!isDone ? `<button class="small" data-task-id="${task.id}" data-action="DONE">Mark Done</button>` : ''}
         ${!isNA ? `<button class="small secondary" data-task-id="${task.id}" data-action="NOT_APPLICABLE">Mark N/A</button>` : ''}
         ${isCompleted ? `<button class="small secondary" data-task-id="${task.id}" data-action="PLANNED">Reset</button>` : ''}
+
+        ${!isCompleted ? `
+          <div class="schedule-group">
+             <input type="date" class="schedule-date" data-task-id="${task.id}" value="${dateStr}" max="2100-12-31">
+             <input type="time" class="schedule-time" data-task-id="${task.id}" value="${timeStr}">
+             <button class="small secondary" data-task-id="${task.id}" data-action="SCHEDULE">Set Reminder</button>
+          </div>
+        ` : ''}
       </div>
     `;
 
@@ -138,7 +165,92 @@ function renderTasks(tasks) {
     });
 }
 
-// Task Actions (Event Delegation)
+// Notifications Logic
+async function scheduleNotification(taskId, dateVal, timeVal) {
+    if (!('Notification' in window)) {
+        showStatus("Notifications not supported in this browser", "error");
+        return;
+    }
+
+    if (Notification.permission !== "granted") {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+            showStatus("Notification permission denied. Reminder set but won't pop up.", "warning");
+        }
+    }
+
+    // Default time 09:00 if missing
+    const time = timeVal || '09:00';
+    const isoString = new Date(`${dateVal}T${time}`).toISOString();
+
+    const task = await get('tasks', taskId);
+    if (!task) return;
+
+    // 1. SUPPRESS EXISTING ACTIVE NOTIFICATIONS FOR THIS TASK
+    const taskNotifications = await queryByIndex('notifications', 'taskId', taskId);
+    for (const n of taskNotifications) {
+        if (!n.firedAt && !n.suppressed) {
+            n.suppressed = true;
+            await update('notifications', n);
+        }
+    }
+
+    // 2. Clone and Update task (No direct mutation)
+    const updatedTask = { ...task, proposedDateTime: isoString };
+    await update('tasks', updatedTask);
+
+    // 3. Create Notification Record
+    const notification = {
+        id: `${taskId}-${isoString}`,
+        taskId: taskId,
+        releaseId: task.releaseId,
+        scheduledFor: isoString,
+        firedAt: null,
+        suppressed: false
+    };
+
+    await add('notifications', notification);
+
+    showStatus("Reminder scheduled!", "success");
+    await loadTasks(task.releaseId);
+}
+
+async function checkAndFireNotifications() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== "granted") return;
+
+    const allNotifications = await getAll('notifications');
+
+    const now = new Date();
+
+    for (const n of allNotifications) {
+        if (n.firedAt || n.suppressed) continue;
+
+        const scheduleDate = new Date(n.scheduledFor);
+        if (scheduleDate <= now) {
+            // Check task status
+            const task = await get('tasks', n.taskId);
+
+            // If task done/NA, suppress
+            if (!task || task.status !== 'PLANNED') {
+                n.suppressed = true;
+                await update('notifications', n);
+                continue;
+            }
+
+            // Fire
+            new Notification("Release Task Reminder", {
+                body: `${task.title}`
+                // removed icon key as requested
+            });
+
+            n.firedAt = nowISO();
+            await update('notifications', n);
+        }
+    }
+}
+
+// Global Click Delegation (Task Actions)
 taskList.addEventListener('click', async (e) => {
     const button = e.target.closest('button');
     if (!button) return;
@@ -148,16 +260,41 @@ taskList.addEventListener('click', async (e) => {
 
     if (!taskId || !action) return;
 
+    // Handle SCHEDULE separately
+    if (action === 'SCHEDULE') {
+        const container = button.closest('.schedule-group');
+        const dateInput = container.querySelector('.schedule-date');
+        const timeInput = container.querySelector('.schedule-time');
+
+        if (!dateInput.value) {
+            showStatus("Please pick a date for the reminder", "error");
+            return;
+        }
+
+        await scheduleNotification(taskId, dateInput.value, timeInput.value);
+        return;
+    }
+
+    // Handle Standard Status Updates
     try {
         const task = await get('tasks', taskId);
         if (!task) throw new Error('Task not found');
 
-        // Record timestamp for DONE and NOT_APPLICABLE
-        // Reset passes undefined
         const timestamp = (action === 'DONE' || action === 'NOT_APPLICABLE') ? nowISO() : undefined;
         const updatedTask = updateTaskStatus(task, action, timestamp);
 
         await update('tasks', updatedTask);
+
+        // Suppress pending notifications if completing
+        if (action === 'DONE' || action === 'NOT_APPLICABLE') {
+            const notifications = await queryByIndex('notifications', 'taskId', taskId);
+            for (const n of notifications) {
+                if (!n.firedAt && !n.suppressed) {
+                    n.suppressed = true;
+                    await update('notifications', n);
+                }
+            }
+        }
 
         // Refresh view
         await loadTasks(task.releaseId);
@@ -174,13 +311,10 @@ backToReleasesBtn.addEventListener('click', () => {
     loadReleases(); // Refresh list in case of new adds (though we are here)
 });
 
-// Handle Form Submit
+// Handle Release Creation
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
-
-    // Clear status
     statusMessage.style.display = 'none';
-    statusMessage.className = '';
 
     const formData = new FormData(form);
     const type = formData.get('releaseType');
@@ -188,56 +322,34 @@ form.addEventListener('submit', async (e) => {
     const year = formData.get('year');
 
     try {
-        // 1. Construct Release Name
         const name = `${quarter} ${type} ${year}`;
         const id = `${quarter.toLowerCase()}-${type.toLowerCase()}-${year}`;
 
-        // Guard against duplicate
         const existing = await get('releases', id);
-        if (existing) {
-            throw new Error('Release already exists');
-        }
+        if (existing) throw new Error('Release already exists');
 
-        // 2. Create Release Object
         const release = createRelease(id, name, nowISO());
-
-        // 3. Persist Release
         await add('releases', release);
 
-        // 4. Fetch Template
         const templates = await getAll('templates');
         const template = templates.find(t => t.releaseType === type);
+        if (!template) throw new Error(`No default template for type: ${type}`);
 
-        if (!template) {
-            throw new Error(`No default template found for type: ${type}`);
-        }
-
-        // 5. Instantiate Tasks
         const tasks = instantiateTemplate(template, release);
-
-        // 6. Persist Tasks with IDs
-        // Generate deterministic IDs here for simplicity in this layer
-        // task id format: releaseId-sequence
         const tasksToSave = tasks.map(task => ({
             ...task,
             id: `${release.id}-task-${task.sequence}`
         }));
 
-        // Save strictly sequentially or parallel (Parallel is fine for IndexedDB usually, but loop is safer for logic)
         for (const task of tasksToSave) {
             await add('tasks', task);
         }
 
-        // 7. Success
         showStatus(`Successfully created release: ${name}`, 'success');
         form.reset();
-        yearInput.value = currentYear(); // Reset year default
-
-        // Refresh List
+        yearInput.value = currentYear();
         await loadReleases();
-
     } catch (error) {
-        // Handle duplicate key error specially if possible, otherwise generic
         if (error.name === 'ConstraintError') {
             showStatus('Error: A release with this ID already exists.', 'error');
         } else {
@@ -248,7 +360,7 @@ form.addEventListener('submit', async (e) => {
 
 function showStatus(message, type) {
     statusMessage.textContent = message;
-    statusMessage.className = type; // 'error' or 'success'
+    statusMessage.className = type === 'warning' ? 'warning-status' : type;
     statusMessage.style.display = 'block';
 }
 
