@@ -25,22 +25,21 @@ const taskList = document.getElementById('task-list');
 const taskViewTitle = document.getElementById('task-view-title');
 const backToReleasesBtn = document.getElementById('back-to-releases');
 
+// State for editing reminders (taskId -> boolean)
+const editState = {};
+
 // Initialize App
 async function init() {
     try {
-        // Set default year
         yearInput.value = currentYear();
 
-        // Seed data
         await seedDefaultTemplates();
 
-        // Check notifications on load (ONLY here)
+        // Check notifications only on app load
         await checkAndFireNotifications();
 
-        // Load Releases
         await loadReleases();
 
-        // Ready
         loading.style.display = 'none';
         form.style.display = 'block';
         releasesContainer.style.display = 'block';
@@ -53,7 +52,6 @@ async function init() {
 // Load Releases
 async function loadReleases() {
     const releases = await getAll('releases');
-    // Sort by createdAt descending
     releases.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     releasesList.innerHTML = '';
@@ -74,24 +72,23 @@ async function loadReleases() {
 
 // Show Task View
 async function showTaskView(release) {
-    // Hide List / Form
+    // Clear edit state when switching views/releases
+    for (const key in editState) delete editState[key];
+
     form.style.display = 'none';
     releasesContainer.style.display = 'none';
     statusMessage.style.display = 'none';
 
-    // Show Task View
     taskView.style.display = 'block';
     taskViewTitle.textContent = release.name;
     taskList.innerHTML = 'Loading tasks...';
 
-    // Load tasks
     await loadTasks(release.id);
 }
 
 // Load Tasks
 async function loadTasks(releaseId) {
     const tasks = await queryByIndex('tasks', 'releaseId', releaseId);
-    // Sort by sequence
     tasks.sort((a, b) => a.sequence - b.sequence);
 
     renderTasks(tasks);
@@ -117,47 +114,76 @@ function renderTasks(tasks) {
 
         div.className = `task-item ${isCompleted ? 'completed' : ''} ${activeClass}`;
 
-        // Task Meta
+        // Branch Info
         let branchInfo = '';
         if (task.branchFrom && task.branchTo) {
             const to = Array.isArray(task.branchTo) ? task.branchTo.join(', ') : task.branchTo;
             branchInfo = `<div>Branch: <code>${task.branchFrom}</code> → <code>${to}</code></div>`;
         }
 
-        // Proposed Date inputs (Pre-fill)
-        const dt = task.proposedDateTime ? new Date(task.proposedDateTime) : null;
+        // Proposed Date (Pre-fill)
         let dateStr = '';
-        let timeStr = '';
-        if (dt) {
-            // iso format yyyy-mm-dd
-            dateStr = dt.toISOString().split('T')[0];
-            // HH:mm for time input
+        let timeStr = ''; // HH:mm
+        if (task.proposedDateTime) {
+            const dt = new Date(task.proposedDateTime);
+            dateStr = dt.toISOString().split('T')[0]; // yyyy-mm-dd
             timeStr = dt.toTimeString().substring(0, 5);
+        } else {
+            // Default to tomorrow 09:00 for new setting
+            const tmrw = new Date();
+            tmrw.setDate(tmrw.getDate() + 1);
+            dateStr = tmrw.toISOString().split('T')[0];
+            timeStr = '09:00';
         }
 
-        const hasNotification = !!task.proposedDateTime;
+        // Reminder Block
+        const hasReminder = !!task.proposedDateTime;
+        const isEditing = editState[task.id];
+        let reminderBlock = '';
+
+        // Add release-id to buttons to avoid unnecessary fetches
+        const commonData = `data-task-id="${task.id}" data-release-id="${task.releaseId}"`;
+
+        if (!isCompleted) {
+            if (hasReminder && !isEditing) {
+                // View Mode
+                reminderBlock = `
+              <div class="reminder-info">
+                 <span class="notification-badge">🔔</span>
+                 <span>Reminder set for ${dateStr}, ${timeStr}</span>
+                 <button class="link" ${commonData} data-action="EDIT_REMINDER">Edit</button>
+                 <button class="link" ${commonData} data-action="CLEAR_REMINDER">Clear</button>
+              </div>
+            `;
+            } else {
+                // Edit or Set Mode
+                reminderBlock = `
+              <div class="schedule-group">
+                 <input type="date" class="schedule-date" value="${dateStr}" max="2100-12-31">
+                 <input type="time" class="schedule-time" value="${timeStr}">
+                 <button class="small secondary" ${commonData} data-action="SCHEDULE">
+                    ${hasReminder ? 'Update Reminder' : 'Set Reminder'}
+                 </button>
+                 ${isEditing ? `<button class="link" ${commonData} data-action="CANCEL_EDIT">Cancel</button>` : ''}
+              </div>
+            `;
+            }
+        }
 
         div.innerHTML = `
       <div class="task-meta">
         <span>Step ${task.sequence} &middot; Status: ${task.status}</span>
-        ${hasNotification ? '<span class="notification-badge">🔔</span>' : ''}
       </div>
       <h3>${task.title}</h3>
       ${task.description ? `<p>${task.description}</p>` : ''}
       ${branchInfo}
       
       <div class="task-actions">
-        ${!isDone ? `<button class="small" data-task-id="${task.id}" data-action="DONE">Mark Done</button>` : ''}
-        ${!isNA ? `<button class="small secondary" data-task-id="${task.id}" data-action="NOT_APPLICABLE">Mark N/A</button>` : ''}
-        ${isCompleted ? `<button class="small secondary" data-task-id="${task.id}" data-action="PLANNED">Reset</button>` : ''}
+        ${!isDone ? `<button class="small" ${commonData} data-action="DONE">Mark Done</button>` : ''}
+        ${!isNA ? `<button class="small secondary" ${commonData} data-action="NOT_APPLICABLE">Mark N/A</button>` : ''}
+        ${isCompleted ? `<button class="small secondary" ${commonData} data-action="PLANNED">Reset</button>` : ''}
 
-        ${!isCompleted ? `
-          <div class="schedule-group">
-             <input type="date" class="schedule-date" data-task-id="${task.id}" value="${dateStr}" max="2100-12-31">
-             <input type="time" class="schedule-time" data-task-id="${task.id}" value="${timeStr}">
-             <button class="small secondary" data-task-id="${task.id}" data-action="SCHEDULE">Set Reminder</button>
-          </div>
-        ` : ''}
+        ${reminderBlock}
       </div>
     `;
 
@@ -165,8 +191,37 @@ function renderTasks(tasks) {
     });
 }
 
-// Notifications Logic
-async function scheduleNotification(taskId, dateVal, timeVal) {
+// --- Reminder & Notification Helpers ---
+
+// Helper to suppress duplication logic
+async function suppressActiveNotifications(taskId) {
+    const notifications = await queryByIndex('notifications', 'taskId', taskId);
+    const updates = [];
+    for (const n of notifications) {
+        if (!n.firedAt && !n.suppressed) {
+            n.suppressed = true;
+            updates.push(update('notifications', n));
+        }
+    }
+    await Promise.all(updates);
+}
+
+async function clearTaskReminder(taskId, releaseId) {
+    const task = await get('tasks', taskId);
+    if (!task) return;
+
+    // 1. Suppress all active notifications
+    await suppressActiveNotifications(taskId);
+
+    // 2. Remove proposedDateTime
+    const updatedTask = { ...task, proposedDateTime: null };
+    await update('tasks', updatedTask);
+
+    await loadTasks(releaseId || task.releaseId);
+    showStatus("Reminder cleared", "success");
+}
+
+async function rescheduleTaskReminder(taskId, dateVal, timeVal, releaseId) {
     if (!('Notification' in window)) {
         showStatus("Notifications not supported in this browser", "error");
         return;
@@ -175,31 +230,25 @@ async function scheduleNotification(taskId, dateVal, timeVal) {
     if (Notification.permission !== "granted") {
         const permission = await Notification.requestPermission();
         if (permission !== "granted") {
-            showStatus("Notification permission denied. Reminder set but won't pop up.", "warning");
+            // Friendly warning for non-technical users
+            showStatus("Reminder saved, but you won't get a popup to alert you.", "warning");
         }
     }
 
-    // Default time 09:00 if missing
     const time = timeVal || '09:00';
     const isoString = new Date(`${dateVal}T${time}`).toISOString();
 
     const task = await get('tasks', taskId);
     if (!task) return;
 
-    // 1. SUPPRESS EXISTING ACTIVE NOTIFICATIONS FOR THIS TASK
-    const taskNotifications = await queryByIndex('notifications', 'taskId', taskId);
-    for (const n of taskNotifications) {
-        if (!n.firedAt && !n.suppressed) {
-            n.suppressed = true;
-            await update('notifications', n);
-        }
-    }
+    // 1. Suppress existing active notifications
+    await suppressActiveNotifications(taskId);
 
-    // 2. Clone and Update task (No direct mutation)
+    // 2. Update task
     const updatedTask = { ...task, proposedDateTime: isoString };
     await update('tasks', updatedTask);
 
-    // 3. Create Notification Record
+    // 3. Create NEW Notification Record
     const notification = {
         id: `${taskId}-${isoString}`,
         taskId: taskId,
@@ -211,16 +260,19 @@ async function scheduleNotification(taskId, dateVal, timeVal) {
 
     await add('notifications', notification);
 
-    showStatus("Reminder scheduled!", "success");
-    await loadTasks(task.releaseId);
+    // Clear edit state
+    delete editState[taskId];
+
+    showStatus("Reminder set!", "success");
+    await loadTasks(releaseId || task.releaseId);
 }
 
+// Notifications Check (App Load Only)
 async function checkAndFireNotifications() {
     if (!('Notification' in window)) return;
     if (Notification.permission !== "granted") return;
 
     const allNotifications = await getAll('notifications');
-
     const now = new Date();
 
     for (const n of allNotifications) {
@@ -228,10 +280,9 @@ async function checkAndFireNotifications() {
 
         const scheduleDate = new Date(n.scheduledFor);
         if (scheduleDate <= now) {
-            // Check task status
             const task = await get('tasks', n.taskId);
 
-            // If task done/NA, suppress
+            // Validate task status
             if (!task || task.status !== 'PLANNED') {
                 n.suppressed = true;
                 await update('notifications', n);
@@ -241,7 +292,6 @@ async function checkAndFireNotifications() {
             // Fire
             new Notification("Release Task Reminder", {
                 body: `${task.title}`
-                // removed icon key as requested
             });
 
             n.firedAt = nowISO();
@@ -250,17 +300,19 @@ async function checkAndFireNotifications() {
     }
 }
 
-// Global Click Delegation (Task Actions)
+// Global Click Delegation
 taskList.addEventListener('click', async (e) => {
     const button = e.target.closest('button');
     if (!button) return;
 
     const taskId = button.dataset.taskId;
     const action = button.dataset.action;
+    // Use releaseId from DOM to optimize reloads
+    const releaseId = button.dataset.releaseId;
 
     if (!taskId || !action) return;
 
-    // Handle SCHEDULE separately
+    // --- Reminder Actions ---
     if (action === 'SCHEDULE') {
         const container = button.closest('.schedule-group');
         const dateInput = container.querySelector('.schedule-date');
@@ -271,11 +323,30 @@ taskList.addEventListener('click', async (e) => {
             return;
         }
 
-        await scheduleNotification(taskId, dateInput.value, timeInput.value);
+        await rescheduleTaskReminder(taskId, dateInput.value, timeInput.value, releaseId);
         return;
     }
 
-    // Handle Standard Status Updates
+    if (action === 'EDIT_REMINDER') {
+        editState[taskId] = true;
+        if (releaseId) await loadTasks(releaseId);
+        return;
+    }
+
+    if (action === 'CANCEL_EDIT') {
+        delete editState[taskId];
+        if (releaseId) await loadTasks(releaseId);
+        return;
+    }
+
+    if (action === 'CLEAR_REMINDER') {
+        if (confirm('Are you sure you want to clear this reminder?')) {
+            await clearTaskReminder(taskId, releaseId);
+        }
+        return;
+    }
+
+    // --- Task Status Actions ---
     try {
         const task = await get('tasks', taskId);
         if (!task) throw new Error('Task not found');
@@ -285,19 +356,14 @@ taskList.addEventListener('click', async (e) => {
 
         await update('tasks', updatedTask);
 
-        // Suppress pending notifications if completing
+        // Auto-clear reminders if completing
         if (action === 'DONE' || action === 'NOT_APPLICABLE') {
-            const notifications = await queryByIndex('notifications', 'taskId', taskId);
-            for (const n of notifications) {
-                if (!n.firedAt && !n.suppressed) {
-                    n.suppressed = true;
-                    await update('notifications', n);
-                }
-            }
+            await suppressActiveNotifications(taskId);
         }
 
-        // Refresh view
-        await loadTasks(task.releaseId);
+        // Effective release ID logic to avoid repetition
+        const effectiveReleaseId = releaseId || task.releaseId;
+        await loadTasks(effectiveReleaseId);
     } catch (error) {
         showStatus(`Failed to update task: ${error.message}`, 'error');
     }
@@ -308,10 +374,10 @@ backToReleasesBtn.addEventListener('click', () => {
     taskView.style.display = 'none';
     form.style.display = 'block';
     releasesContainer.style.display = 'block';
-    loadReleases(); // Refresh list in case of new adds (though we are here)
+    loadReleases();
 });
 
-// Handle Release Creation
+// Handle release creation
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
     statusMessage.style.display = 'none';
