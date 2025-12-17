@@ -141,7 +141,6 @@ async function fireNotification(n) {
         const title = "Release Task Reminder";
         const options = {
             body: `${task.title}`,
-            icon: '/icons/icon-192x192.png',
             tag: n.id
         };
 
