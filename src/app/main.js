@@ -24,6 +24,8 @@ const taskView = document.getElementById('task-view');
 const taskList = document.getElementById('task-list');
 const taskViewTitle = document.getElementById('task-view-title');
 const backToReleasesBtn = document.getElementById('back-to-releases');
+const themeToggle = document.getElementById('theme-toggle');
+const swHintContainer = document.getElementById('sw-hint-container');
 
 // State for editing reminders (taskId -> boolean)
 const editState = {};
@@ -31,6 +33,8 @@ const editState = {};
 // Initialize App
 async function init() {
     try {
+        initTheme();
+        initSwHint();
         yearInput.value = currentYear();
 
         await seedDefaultTemplates();
@@ -58,6 +62,44 @@ async function init() {
         showStatus('Failed to initialize app. Please refresh.', 'error');
         loading.style.display = 'none';
     }
+}
+
+// --- Polish Logic (Theme & Hints) ---
+
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        document.body.classList.add('dark');
+        themeToggle.textContent = '☀️ Light mode';
+    } else {
+        document.body.classList.remove('dark');
+        themeToggle.textContent = '🌙 Dark mode';
+    }
+}
+
+themeToggle.addEventListener('click', () => {
+    const isDark = document.body.classList.toggle('dark');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    themeToggle.textContent = isDark ? '☀️ Light mode' : '🌙 Dark mode';
+});
+
+function initSwHint() {
+    // Hide if dismissed in current session
+    if (sessionStorage.getItem('sw-hint-dismissed')) return;
+
+    swHintContainer.innerHTML = `
+      <div class="sw-hint">
+        <span>Reminders work best when the browser remains open.</span>
+        <button class="close-hint" title="Dismiss">×</button>
+      </div>
+    `;
+
+    swHintContainer.querySelector('.close-hint').addEventListener('click', () => {
+        swHintContainer.innerHTML = '';
+        sessionStorage.setItem('sw-hint-dismissed', 'true');
+    });
 }
 
 // Load Releases
@@ -191,13 +233,15 @@ function renderTasks(tasks, activeTaskIds = new Set()) {
             `;
             } else if (hasReminder && !isEditing) {
                 // View Mode (Future or Fired Reminder)
-                const label = (isDue && !hasActiveNotification)
-                    ? `Reminder fired at ${dateStr}, ${timeStr}`
+                const isFired = isDue && !hasActiveNotification;
+
+                const label = isFired
+                    ? `<span class="reminder-fired">🕓 Reminder fired at ${dateStr}, ${timeStr}</span>`
                     : `Reminder set for ${dateStr}, ${timeStr}`;
 
                 reminderBlock = `
               <div class="reminder-info">
-                 <span class="notification-badge">🔔</span>
+                 <span class="notification-badge">${isFired ? '' : '🔔'}</span>
                  <span>${label}</span>
                  <button class="link" ${commonData} data-action="EDIT_REMINDER">Edit</button>
                  <button class="link" ${commonData} data-action="CLEAR_REMINDER">Clear</button>

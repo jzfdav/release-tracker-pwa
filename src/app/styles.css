@@ -8,6 +8,17 @@
   --hover-color: #e5e5e5;
   --muted-text: #6f6f6f;
   --warning-bg: #fffbf0;
+  --item-bg: #ffffff;
+}
+
+body.dark {
+  --bg-color: #161616;
+  --text-color: #f4f4f4;
+  --border-color: #393939;
+  --hover-color: #262626;
+  --muted-text: #a8a8a8;
+  --warning-bg: #2d2700;
+  --item-bg: #262626;
 }
 
 body {
@@ -164,7 +175,7 @@ button.link:hover {
   padding: 1rem;
   border: 1px solid var(--border-color);
   margin-bottom: 1rem;
-  background-color: #fff;
+  background-color: var(--item-bg);
   position: relative;
 }
 
@@ -173,9 +184,9 @@ button.link:hover {
 }
 
 .task-item.completed {
-  background-color: #f4f4f4;
+  background-color: var(--hover-color);
   color: var(--muted-text);
-  border-color: #eee;
+  border-color: var(--border-color);
 }
 
 .task-meta {
@@ -207,7 +218,7 @@ button.link:hover {
 .reminder-info {
   font-size: 0.875rem;
   color: var(--text-color);
-  background-color: #f3f3f3;
+  background-color: var(--hover-color);
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
 }
@@ -241,4 +252,63 @@ button.link:hover {
   margin-left: 0.5rem;
   font-size: 1.2rem;
   line-height: 1;
+}
+
+/* Polish Items */
+
+.header-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -3.5rem;
+  margin-bottom: 2rem;
+}
+
+@media (max-width: 600px) {
+  .header-actions {
+    margin-top: 0;
+    justify-content: flex-start;
+  }
+}
+
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 0.4rem 0.8rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.theme-toggle:hover {
+  background-color: var(--hover-color);
+}
+
+.sw-hint {
+  background-color: var(--warning-bg);
+  font-size: 0.875rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  border-left: 4px solid #f1c21b;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sw-hint button.close-hint {
+  background: none;
+  border: none;
+  color: var(--muted-text);
+  font-size: 1.25rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.reminder-fired {
+  opacity: 0.8;
+  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
