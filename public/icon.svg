@@ -6,6 +6,22 @@
     </linearGradient>
   </defs>
   <rect width="512" height="512" rx="100" fill="url(#grad1)"/>
-  <path fill="#ffffff" d="M376 160H136c-13.2 0-24 10.8-24 24v208c0 13.2 10.8 24 24 24h240c13.2 0 24-10.8 24-24V184c0-13.2-10.8-24-24-24zm-16 216H152V184h208v192zm-40-144H264v32h56v-32zm-72 0h-56v32h56v-32zm72 64H264v32h56v-32zm-72 0h-56v32h56v-32z"/>
-  <path fill="#ffffff" d="M256 64C150 64 64 150 64 256s86 192 192 192 192-86 192-192S362 64 256 64zm0 352c-88.4 0-160-71.6-160-160S167.6 96 256 96s160 71.6 160 160-71.6 160-160 160z" opacity="0.1"/>
+
+  <!-- Connecting Lines -->
+  <!-- Main vertical stem -->
+  <path d="M170 400 V130" stroke="#ffffff" stroke-width="48" stroke-linecap="round" fill="none"/>
+  
+  <!-- Branch curve -->
+  <!-- Starts from main stem at y=300, curves to right node at y=130 -->
+  <path d="M170 300 C170 200 342 200 342 130" stroke="#ffffff" stroke-width="48" stroke-linecap="round" fill="none"/>
+  
+  <!-- Nodes (Circles) -->
+  <!-- Top Left (Master tip) -->
+  <circle cx="170" cy="130" r="52" fill="#ffffff"/>
+  
+  <!-- Bottom Left (Base) -->
+  <circle cx="170" cy="400" r="52" fill="#ffffff"/>
+  
+  <!-- Top Right (Feature/Release tip) -->
+  <circle cx="342" cy="130" r="52" fill="#ffffff"/>
 </svg>
