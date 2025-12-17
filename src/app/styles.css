@@ -212,6 +212,20 @@ button.link:hover {
   border-radius: 4px;
 }
 
+/* Snooze layout */
+.snooze-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 0.25rem;
+}
+
+.due-indicator {
+  color: var(--error-color);
+  font-weight: bold;
+}
+
 @media (max-width: 600px) {
 
   .schedule-group,

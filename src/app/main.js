@@ -91,14 +91,26 @@ async function loadTasks(releaseId) {
     const tasks = await queryByIndex('tasks', 'releaseId', releaseId);
     tasks.sort((a, b) => a.sequence - b.sequence);
 
-    renderTasks(tasks);
+    // Fetch active notifications to determine snooze visibility settings
+    // Avoids N+1 queries by fetching all and filtering (acceptable for local store)
+    const allNotifications = await getAll('notifications');
+    const activeTaskIds = new Set();
+
+    for (const n of allNotifications) {
+        if (n.releaseId === releaseId && !n.firedAt && !n.suppressed) {
+            activeTaskIds.add(n.taskId);
+        }
+    }
+
+    renderTasks(tasks, activeTaskIds);
 }
 
 // Render Tasks
-function renderTasks(tasks) {
+function renderTasks(tasks, activeTaskIds = new Set()) {
     taskList.innerHTML = '';
 
     let nextActiveFound = false;
+    const now = new Date();
 
     tasks.forEach(task => {
         const div = document.createElement('div');
@@ -124,10 +136,12 @@ function renderTasks(tasks) {
         // Proposed Date (Pre-fill)
         let dateStr = '';
         let timeStr = ''; // HH:mm
+        let scheduleDt = null;
+
         if (task.proposedDateTime) {
-            const dt = new Date(task.proposedDateTime);
-            dateStr = dt.toISOString().split('T')[0]; // yyyy-mm-dd
-            timeStr = dt.toTimeString().substring(0, 5);
+            scheduleDt = new Date(task.proposedDateTime);
+            dateStr = scheduleDt.toISOString().split('T')[0]; // yyyy-mm-dd
+            timeStr = scheduleDt.toTimeString().substring(0, 5);
         } else {
             // Default to tomorrow 09:00 for new setting
             const tmrw = new Date();
@@ -137,7 +151,10 @@ function renderTasks(tasks) {
         }
 
         // Reminder Block
-        const hasReminder = !!task.proposedDateTime;
+        const hasReminder = !!scheduleDt;
+        const isDue = hasReminder && scheduleDt <= now;
+        // Check if there is physically an active notification record
+        const hasActiveNotification = activeTaskIds.has(task.id);
         const isEditing = editState[task.id];
         let reminderBlock = '';
 
@@ -145,12 +162,32 @@ function renderTasks(tasks) {
         const commonData = `data-task-id="${task.id}" data-release-id="${task.releaseId}"`;
 
         if (!isCompleted) {
-            if (hasReminder && !isEditing) {
-                // View Mode
+            // Show Snooze ONLY if due AND we have an active (unfired) notification record
+            if (hasReminder && isDue && hasActiveNotification && !isEditing) {
+                // SNOOZE Mode (Due Reminder)
+                reminderBlock = `
+              <div class="reminder-info error">
+                 <span class="due-indicator">🔔 Reminder Due!</span>
+                 <span>(${dateStr}, ${timeStr})</span>
+                 <div class="snooze-actions">
+                     <button class="small secondary" ${commonData} data-action="SNOOZE" data-minutes="10">+10m</button>
+                     <button class="small secondary" ${commonData} data-action="SNOOZE" data-minutes="30">+30m</button>
+                     <button class="small secondary" ${commonData} data-action="SNOOZE" data-minutes="60">+1h</button>
+                     <button class="link" ${commonData} data-action="EDIT_REMINDER">Custom time</button>
+                     <button class="link" ${commonData} data-action="CLEAR_REMINDER">Dismiss</button>
+                 </div>
+              </div>
+            `;
+            } else if (hasReminder && !isEditing) {
+                // View Mode (Future or Fired Reminder)
+                const label = (isDue && !hasActiveNotification)
+                    ? `Reminder fired at ${dateStr}, ${timeStr}`
+                    : `Reminder set for ${dateStr}, ${timeStr}`;
+
                 reminderBlock = `
               <div class="reminder-info">
                  <span class="notification-badge">🔔</span>
-                 <span>Reminder set for ${dateStr}, ${timeStr}</span>
+                 <span>${label}</span>
                  <button class="link" ${commonData} data-action="EDIT_REMINDER">Edit</button>
                  <button class="link" ${commonData} data-action="CLEAR_REMINDER">Clear</button>
               </div>
@@ -193,7 +230,7 @@ function renderTasks(tasks) {
 
 // --- Reminder & Notification Helpers ---
 
-// Helper to suppress duplication logic
+// Helper to suppress active notifications (avoiding duplication)
 async function suppressActiveNotifications(taskId) {
     const notifications = await queryByIndex('notifications', 'taskId', taskId);
     const updates = [];
@@ -204,6 +241,28 @@ async function suppressActiveNotifications(taskId) {
         }
     }
     await Promise.all(updates);
+}
+
+// Internal helper to atomically schedule a reminder by suppressing old ones and adding a new one
+async function scheduleReminderInternal(task, isoString) {
+    // 1. Suppress existing
+    await suppressActiveNotifications(task.id);
+
+    // 2. Update task
+    const updatedTask = { ...task, proposedDateTime: isoString };
+    await update('tasks', updatedTask);
+
+    // 3. Create NEW Notification Record
+    const notification = {
+        id: `${task.id}-${isoString}`,
+        taskId: task.id,
+        releaseId: task.releaseId,
+        scheduledFor: isoString,
+        firedAt: null,
+        suppressed: false
+    };
+
+    await add('notifications', notification);
 }
 
 async function clearTaskReminder(taskId, releaseId) {
@@ -241,29 +300,43 @@ async function rescheduleTaskReminder(taskId, dateVal, timeVal, releaseId) {
     const task = await get('tasks', taskId);
     if (!task) return;
 
-    // 1. Suppress existing active notifications
-    await suppressActiveNotifications(taskId);
-
-    // 2. Update task
-    const updatedTask = { ...task, proposedDateTime: isoString };
-    await update('tasks', updatedTask);
-
-    // 3. Create NEW Notification Record
-    const notification = {
-        id: `${taskId}-${isoString}`,
-        taskId: taskId,
-        releaseId: task.releaseId,
-        scheduledFor: isoString,
-        firedAt: null,
-        suppressed: false
-    };
-
-    await add('notifications', notification);
+    await scheduleReminderInternal(task, isoString);
 
     // Clear edit state
     delete editState[taskId];
 
     showStatus("Reminder set!", "success");
+    await loadTasks(releaseId || task.releaseId);
+}
+
+async function snoozeTaskReminder(taskId, minutes, releaseId) {
+    // Permission check for snooze (match reschedule behavior)
+    if (!('Notification' in window)) return;
+
+    let warning = false;
+    if (Notification.permission !== "granted") {
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+            warning = true;
+        }
+    }
+
+    const task = await get('tasks', taskId);
+    if (!task) return;
+
+    // Calculate new time
+    const now = new Date();
+    now.setMinutes(now.getMinutes() + parseInt(minutes, 10));
+    const isoString = now.toISOString();
+
+    await scheduleReminderInternal(task, isoString);
+
+    if (warning) {
+        showStatus("Snoozed, but you won't get a popup to alert you.", "warning");
+    } else {
+        showStatus(`Snoozed for ${minutes} minutes`, "success");
+    }
+
     await loadTasks(releaseId || task.releaseId);
 }
 
@@ -327,6 +400,14 @@ taskList.addEventListener('click', async (e) => {
         return;
     }
 
+    if (action === 'SNOOZE') {
+        const minutes = button.dataset.minutes;
+        if (minutes) {
+            await snoozeTaskReminder(taskId, minutes, releaseId);
+        }
+        return;
+    }
+
     if (action === 'EDIT_REMINDER') {
         editState[taskId] = true;
         if (releaseId) await loadTasks(releaseId);
@@ -377,7 +458,7 @@ backToReleasesBtn.addEventListener('click', () => {
     loadReleases();
 });
 
-// Handle release creation
+// Handle Release Creation
 form.addEventListener('submit', async (e) => {
     e.preventDefault();
     statusMessage.style.display = 'none';
