@@ -38,6 +38,16 @@ async function init() {
         // Check notifications only on app load
         await checkAndFireNotifications();
 
+        // Register Service Worker (Milestone 6a)
+        if ('serviceWorker' in navigator) {
+            try {
+                const reg = await navigator.serviceWorker.register('./service-worker.js');
+                console.log('Service Worker registered', reg);
+            } catch (err) {
+                console.log('Service Worker registration failed:', err);
+            }
+        }
+
         await loadReleases();
 
         loading.style.display = 'none';
