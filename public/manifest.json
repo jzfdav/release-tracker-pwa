@@ -1,0 +1,10 @@
+{
+    "name": "Release Tracker",
+    "short_name": "ReleaseTracker",
+    "description": "A minimal release branching checklist app",
+    "theme_color": "#ffffff",
+    "background_color": "#ffffff",
+    "display": "standalone",
+    "start_url": "/",
+    "icons": []
+}
