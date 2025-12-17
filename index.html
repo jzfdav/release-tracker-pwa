@@ -1,13 +1,75 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Release Tracker</title>
-    <link rel="manifest" href="/manifest.json">
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Release Branching Checklist</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+</head>
+
+<body>
+    <div id="app">
+        <div class="header-actions">
+            <button id="theme-toggle" class="theme-toggle">🌙 Dark mode</button>
+        </div>
+        <h1>Release Branching Checklist</h1>
+
+        <div id="loading">Initializing...</div>
+
+        <div id="sw-hint-container"></div>
+
+        <form id="create-release-form" style="display: none;">
+            <div class="form-group">
+                <label>Release Type</label>
+                <div class="radio-group">
+                    <div class="radio-option">
+                        <input type="radio" id="type-qr" name="releaseType" value="QR" checked>
+                        <label for="type-qr">Quarterly Release (QR)</label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" id="type-mr" name="releaseType" value="MR">
+                        <label for="type-mr">Minor Release (MR)</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="quarter">Quarter</label>
+                <select id="quarter" name="quarter" required>
+                    <option value="1Q">1Q</option>
+                    <option value="2Q">2Q</option>
+                    <option value="3Q">3Q</option>
+                    <option value="4Q">4Q</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="year">Year</label>
+                <input type="number" id="year" name="year" min="2000" max="2100" required>
+            </div>
+
+            <button type="submit">Create Release</button>
+        </form>
+
+        <div id="status-message"></div>
+
+        <hr>
+
+        <div id="releases-container">
+            <h2>Existing Releases</h2>
+            <div id="releases-list"></div>
+        </div>
+
+        <div id="task-view" style="display: none;">
+            <button id="back-to-releases" class="secondary">← Back to Releases</button>
+            <h2 id="task-view-title"></h2>
+            <div id="task-list"></div>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+
 </html>

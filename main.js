@@ -1,8 +1,8 @@
-import { seedDefaultTemplates } from '../seed/templates.js';
-import { createRelease } from '../domain/release.js';
-import { updateTaskStatus } from '../domain/task.js';
-import { instantiateTemplate } from '../domain/template.js';
-import { add, getAll, get, update, queryByIndex } from '../storage/db.js';
+import { seedDefaultTemplates } from './seed/templates.js';
+import { createRelease } from './domain/release.js';
+import { updateTaskStatus } from './domain/task.js';
+import { instantiateTemplate } from './domain/template.js';
+import { add, getAll, get, update, queryByIndex } from './storage/db.js';
 
 // Helpers
 function nowISO() {
@@ -46,7 +46,9 @@ async function init() {
         // Register Service Worker (Milestone 6a)
         if ('serviceWorker' in navigator) {
             try {
-                const reg = await navigator.serviceWorker.register('./service-worker.js');
+                // Use import.meta.env.BASE_URL for correct path in dev and build
+                const swPath = `${import.meta.env.BASE_URL}service-worker.js`;
+                const reg = await navigator.serviceWorker.register(swPath);
                 console.log('Service Worker registered', reg);
             } catch (err) {
                 console.log('Service Worker registration failed:', err);
